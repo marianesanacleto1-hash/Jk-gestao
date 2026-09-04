@@ -365,7 +365,7 @@ function renderFinance(){
 function renderHistory(){
  const q=($('#historySearch')?.value||'').toLowerCase();
  const arr=[...DB.services].sort((a,b)=>b.date.localeCompare(a.date)).filter(s=>{const c=client(s.clientId);return !q||(c?.name||'').toLowerCase().includes(q)});
- $('#historyList').innerHTML=arr.length?arr.map(s=>{const c=client(s.clientId);let tx='Serviço realizado';if(s.chargeDue)tx+=s.paid?' • Pago':' • A receber';else if(c?.freq==='Quinzenal')tx+=' • 1ª visita do ciclo';return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')} — ${tx}</div><div class="meta">${fmt(s.date)}${s.note?' • '+esc(s.note):''}</div></div><div class="amount">${s.chargeDue?money(s.amount):'—'}</div></div>`}).join(''):'<div class="empty">Nenhum serviço realizado registrado.</div>';
+ $('#historyList').innerHTML=arr.length?arr.map(s=>{const c=client(s.clientId);let tx='Serviço realizado';if(s.chargeDue)tx+=s.paid?' • Pago':' • <span style="color:var(--danger)">A receber</span>';else if(c?.freq==='Quinzenal')tx+=' • 1ª visita do ciclo';return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')} — ${tx}</div><div class="meta">${fmt(s.date)}${s.note?' • '+esc(s.note):''}</div></div><div class="amount">${s.chargeDue?money(s.amount):'—'}</div></div>`}).join(''):'<div class="empty">Nenhum serviço realizado registrado.</div>';
 }
 function renderAgenda(){
  const y=calCursor.getFullYear(),m=calCursor.getMonth();
