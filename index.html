@@ -40,8 +40,8 @@ button{cursor:pointer}
 .danger{border:0;background:#f8e9e7;color:var(--danger);padding:10px 12px;border-radius:10px;font-weight:800}
 .metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .metric{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px;box-shadow:var(--shadow)}
-.metric .k{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800}
-.metric .v{font-size:25px;font-weight:900;color:var(--green);margin-top:7px}
+.metric .k{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800}.metric .v{font-size:25px;font-weight:900;color:var(--green);margin-top:7px}
+.metric:has(#mReceive) .k,.metric #mReceive{color:var(--danger)}
 .metric .s{font-size:11px;color:var(--muted);margin-top:4px}
 .card{background:#fff;border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);overflow:hidden}
 .cardHead{padding:15px 17px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
