@@ -42,6 +42,7 @@ button{cursor:pointer}
 .metric{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px;box-shadow:var(--shadow)}
 .metric .k{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800}.metric .v{font-size:25px;font-weight:900;color:var(--green);margin-top:7px}
 .metric:has(#mReceive) .k,.metric #mReceive{color:var(--danger)}
+.pendingAmount{color:var(--danger)}
 .metric .s{font-size:11px;color:var(--muted);margin-top:4px}
 .card{background:#fff;border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);overflow:hidden}
 .cardHead{padding:15px 17px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -355,12 +356,12 @@ function renderDashboard(){
  const upcoming=DB.clients.filter(c=>c.nextDue).sort((a,b)=>a.nextDue.localeCompare(b.nextDue)).slice(0,6);
  $('#dashAgenda').innerHTML=upcoming.length?upcoming.map(c=>`<div class="item"><div class="left"><div class="title">${esc(c.name)}</div><div class="meta">${fmt(c.nextDue)} • ${esc(c.freq)} • ${agendaState(c).text}</div></div><button class="secondary" onclick="openDone('${c.id}')">Realizado</button></div>`).join(''):'<div class="empty">Sem visitas cadastradas.</div>';
  const pend=DB.services.filter(s=>s.chargeDue&&!s.paid).sort((a,b)=>a.date.localeCompare(b.date));
- $('#dashPending').innerHTML=pend.length?pend.slice(0,6).map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Serviço ${fmt(s.date)}</div></div><div class="amount">${money(s.amount)}</div></div>`}).join(''):'<div class="empty">Nenhum pagamento pendente.</div>';
+ $('#dashPending').innerHTML=pend.length?pend.slice(0,6).map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Serviço ${fmt(s.date)}</div></div><div class="amount pendingAmount">${money(s.amount)}</div></div>`}).join(''):'<div class="empty">Nenhum pagamento pendente.</div>';
 }
 function renderFinance(){
  const pend=DB.services.filter(s=>s.chargeDue&&!s.paid);
  $('#fPending').textContent=money(totalPending()); $('#fPaid').textContent=money(paidThisMonth()); $('#fCount').textContent=pend.length;
- $('#financeList').innerHTML=pend.length?pend.map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Cobrança gerada pelo serviço realizado em ${fmt(s.date)}${s.note?' • '+esc(s.note):''}</div></div><div><div class="amount">${money(s.amount)}</div><button class="primary" style="margin-top:7px" onclick="markPaid('${s.clientId}','${s.id}')">Marcar recebido</button></div></div>`}).join(''):'<div class="empty">Tudo em dia. Nenhuma cobrança pendente.</div>';
+ $('#financeList').innerHTML=pend.length?pend.map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Cobrança gerada pelo serviço realizado em ${fmt(s.date)}${s.note?' • '+esc(s.note):''}</div></div><div><div class="amount pendingAmount">${money(s.amount)}</div><button class="primary" style="margin-top:7px" onclick="markPaid('${s.clientId}','${s.id}')">Marcar recebido</button></div></div>`}).join(''):'<div class="empty">Tudo em dia. Nenhuma cobrança pendente.</div>';
 }
 function renderHistory(){
  const q=($('#historySearch')?.value||'').toLowerCase();
