@@ -138,7 +138,7 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
  <div class="hero"><div><h2>Clientes</h2><p>Cadastro, frequência, datas, valor e situação de cada cliente.</p></div><button class="primary" onclick="openClient()">+ Novo cliente</button></div>
  <div class="card">
   <div class="cardBody">
-   <div class="toolbar"><input class="search" id="clientSearch" placeholder="Buscar cliente, cidade ou observação..."><select id="clientFreq"><option value="">Todas frequências</option><option>Quinzenal</option><option>Mensal</option><option>Avulso</option></select></div>
+   <div class="toolbar"><input class="search" id="clientSearch" placeholder="Buscar cliente, cidade ou observação..."><select id="clientFreq"><option value="">Todas frequências</option><option>Quinzenal</option><option>Mensal</option><option>A cada 10 dias</option><option>Avulso</option></select></div>
   </div>
   <div class="tableWrap"><table><thead><tr><th>Cliente</th><th>Frequência</th><th>Último serviço</th><th>Próximo previsto</th><th>Agenda</th><th>Pagamento</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="clientRows"></tbody></table></div>
  </div>
@@ -158,6 +158,7 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
   <div class="metric"><div class="k">Cobranças pendentes</div><div class="v" id="fCount">0</div></div>
  </div>
  <div class="card"><div class="cardHead"><h3>A receber</h3></div><div class="cardBody"><div id="financeList" class="list"></div></div></div>
+ <div class="card" style="margin-top:16px"><div class="cardHead"><h3>Recebidos</h3><span class="minor">Todos os pagamentos ativos</span></div><div class="cardBody"><div id="receivedList" class="list"></div></div></div>
 </section>
 
 <section id="history" class="page">
@@ -184,14 +185,15 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
   <div class="formGrid">
    <div class="field full"><label>Cliente / empresa *</label><input id="cName" placeholder="Ex.: Rede Feminina, Rosi, Empresa X"></div>
    <div class="field"><label>Cidade / local</label><input id="cCity" placeholder="Ex.: Criciúma"></div>
-   <div class="field"><label>Frequência</label><select id="cFreq"><option>Quinzenal</option><option>Mensal</option><option>Avulso</option></select></div>
+   <div class="field"><label>Frequência</label><select id="cFreq"><option>Quinzenal</option><option>Mensal</option><option>A cada 10 dias</option><option>Avulso</option></select></div>
    <div class="field"><label>Valor da cobrança (R$)</label><input id="cValue" type="number" min="0" step="0.01"></div>
    <div class="field"><label>Último serviço realmente realizado</label><input id="cLast" type="date"></div>
    <div class="field"><label>Próxima visita prevista</label><input id="cNext" type="date"></div>
    <div class="field" id="stageField"><label>No quinzenal, o último serviço foi</label><select id="cStage"><option value="1">1ª visita do ciclo</option><option value="2">2ª visita do ciclo</option></select></div>
    <div class="field"><label>Situação do último serviço</label><select id="cLastPayment"><option value="paid">Já pago / nada pendente</option><option value="pending">Ainda não pago</option></select></div>
+   <div class="field full" id="existingHistoryHint" hidden><div class="note">Para atualizar o último serviço, use “Serviço feito”. Para registrar ou desfazer recebimentos, use o Financeiro. Editar o cadastro mantém o histórico existente.</div></div>
    <div class="field full"><label>Observações</label><textarea id="cNotes" rows="3" placeholder="Contato, endereço, detalhes do serviço..."></textarea></div>
-   <div class="field full"><div class="note">Quinzenal: +15 dias. Mensal: +1 mês. Se cair sábado ou domingo, a próxima visita vai automaticamente para segunda-feira. A próxima data é apenas agenda e nunca cria cobrança sozinha.</div></div>
+   <div class="field full"><div class="note">A cada 10 dias: +10 dias. Quinzenal: +15 dias. Mensal: +1 mês. Se cair sábado ou domingo, a próxima visita vai automaticamente para segunda-feira. A próxima data é apenas agenda e nunca cria cobrança sozinha.</div></div>
   </div>
  </div>
  <div class="dlgFoot"><button id="deleteClientBtn" class="danger" style="display:none" onclick="deleteClient()">Excluir</button><button class="ghost" onclick="clientDialog.close()">Cancelar</button><button class="primary" onclick="saveClient()">Salvar cliente</button></div>
@@ -291,6 +293,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 function nextDate(last,freq){
  if(!last||freq==='Avulso')return '';
  let d=parseDate(last);
+ if(freq==='A cada 10 dias')d.setDate(d.getDate()+10);
  if(freq==='Quinzenal')d.setDate(d.getDate()+15);
  if(freq==='Mensal')d.setMonth(d.getMonth()+1);
  if(d.getDay()===6)d.setDate(d.getDate()+2);
@@ -298,13 +301,16 @@ function nextDate(last,freq){
  return iso(d);
 }
 function client(id){return DB.clients.find(c=>c.id===id)}
+function isCharge(s){return s.chargeDue===true && !!s.date && s.date<=today()}
+function activePayments(){return DB.payments.filter(p=>!p.reversedAt)}
+function serviceLabel(s){return s?`${s.cyclePosition===2?'Ciclo quinzenal • 2ª visita':'Serviço realizado'} em ${fmt(s.date)}`:'Serviço não localizado'}
 function servicesFor(id){return DB.services.filter(s=>s.clientId===id).sort((a,b)=>a.date.localeCompare(b.date))}
-function pendingCharges(id){return DB.services.filter(s=>s.clientId===id && s.chargeDue===true && !s.paid)}
+function pendingCharges(id){return DB.services.filter(s=>s.clientId===id && isCharge(s) && !s.paid)}
 function paidThisMonth(){
  const prefix=today().slice(0,7);
- return DB.payments.filter(p=>(p.date||'').startsWith(prefix)).reduce((a,p)=>a+Number(p.amount||0),0)
+ return activePayments().filter(p=>(p.date||'').startsWith(prefix)).reduce((a,p)=>a+Number(p.amount||0),0)
 }
-function totalPending(){return DB.services.filter(s=>s.chargeDue===true&&!s.paid).reduce((a,s)=>a+Number(s.amount||0),0)}
+function totalPending(){return DB.services.filter(s=>isCharge(s)&&!s.paid).reduce((a,s)=>a+Number(s.amount||0),0)}
 
 function agendaState(c){
  if(!c.nextDue)return {cls:'neutral',text:'Sem próxima data'};
@@ -331,7 +337,7 @@ function goPage(id){
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>goPage(b.dataset.page));
 
 function renderAll(){
- renderMetrics(); renderClients(); renderDashboard(); renderFinance(); renderHistory(); renderAgenda();
+ renderMetrics(); renderClients(); renderDashboard(); renderFinance(); renderReceived(); renderHistory(); renderAgenda();
 }
 function renderMetrics(){
  $('#mClients').textContent=DB.clients.length;
@@ -355,13 +361,20 @@ function renderClients(){
 function renderDashboard(){
  const upcoming=DB.clients.filter(c=>c.nextDue).sort((a,b)=>a.nextDue.localeCompare(b.nextDue)).slice(0,6);
  $('#dashAgenda').innerHTML=upcoming.length?upcoming.map(c=>`<div class="item"><div class="left"><div class="title">${esc(c.name)}</div><div class="meta">${fmt(c.nextDue)} • ${esc(c.freq)} • ${agendaState(c).text}</div></div><button class="secondary" onclick="openDone('${c.id}')">Realizado</button></div>`).join(''):'<div class="empty">Sem visitas cadastradas.</div>';
- const pend=DB.services.filter(s=>s.chargeDue&&!s.paid).sort((a,b)=>a.date.localeCompare(b.date));
+ const pend=DB.services.filter(s=>isCharge(s)&&!s.paid).sort((a,b)=>a.date.localeCompare(b.date));
  $('#dashPending').innerHTML=pend.length?pend.slice(0,6).map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Serviço ${fmt(s.date)}</div></div><div class="amount pendingAmount">${money(s.amount)}</div></div>`}).join(''):'<div class="empty">Nenhum pagamento pendente.</div>';
 }
 function renderFinance(){
- const pend=DB.services.filter(s=>s.chargeDue&&!s.paid);
+ const pend=DB.services.filter(s=>isCharge(s)&&!s.paid);
  $('#fPending').textContent=money(totalPending()); $('#fPaid').textContent=money(paidThisMonth()); $('#fCount').textContent=pend.length;
  $('#financeList').innerHTML=pend.length?pend.map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Cobrança gerada pelo serviço realizado em ${fmt(s.date)}${s.note?' • '+esc(s.note):''}</div></div><div><div class="amount pendingAmount">${money(s.amount)}</div><button class="primary" style="margin-top:7px" onclick="markPaid('${s.clientId}','${s.id}')">Marcar recebido</button></div></div>`}).join(''):'<div class="empty">Tudo em dia. Nenhuma cobrança pendente.</div>';
+}
+function renderReceived(){
+ const payments=[...activePayments()].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+ $('#receivedList').innerHTML=payments.length?payments.map(p=>{
+   const s=DB.services.find(s=>s.id===p.serviceId&&s.clientId===p.clientId);
+   return `<div class="item"><div class="left"><div class="title">${esc(p.clientName||client(p.clientId)?.name||'Cliente')}</div><div class="meta">Pagamento em ${fmt(p.date)}<br>${esc(p.serviceDescription||serviceLabel(s))}</div></div><div><div class="amount">${money(p.amount)}</div><button class="danger" style="margin-top:7px" onclick="undoPayment('${p.id}')">Desfazer pagamento</button></div></div>`;
+ }).join(''):'<div class="empty">Nenhum pagamento recebido registrado.</div>';
 }
 function renderHistory(){
  const q=($('#historySearch')?.value||'').toLowerCase();
@@ -388,6 +401,8 @@ function openClient(id=null){
  $('#clientDlgTitle').textContent=c?'Editar cliente':'Novo cliente';
  $('#cName').value=c?.name||''; $('#cCity').value=c?.city||''; $('#cFreq').value=c?.freq||'Quinzenal'; $('#cValue').value=c?.value??'';
  $('#cLast').value=c?.lastDone||''; $('#cNext').value=c?.nextDue||''; $('#cStage').value=c?.seedStage||'1'; $('#cLastPayment').value=c?.seedPayment||'paid'; $('#cNotes').value=c?.notes||'';
+ ['#cLast','#cStage','#cLastPayment'].forEach(id=>$(id).disabled=!!c);
+ $('#existingHistoryHint').style.display=c?'flex':'none';
  $('#deleteClientBtn').style.display=c?'inline-block':'none'; updateStage(); clientDialog.showModal();
 }
 function updateStage(){$('#stageField').style.display=$('#cFreq').value==='Quinzenal'?'flex':'none'}
@@ -421,9 +436,10 @@ function syncInitialService(c){
 function saveClient(){
  const name=$('#cName').value.trim();if(!name)return alert('Informe o nome do cliente.');
  const old=editingClientId?client(editingClientId):null, isNew=!old;
- const c={id:old?.id||uid(),name,city:$('#cCity').value.trim(),freq:$('#cFreq').value,value:Number($('#cValue').value||0),lastDone:$('#cLast').value,nextDue:$('#cNext').value||nextDate($('#cLast').value,$('#cFreq').value),seedStage:$('#cStage').value,seedPayment:$('#cLastPayment').value,notes:$('#cNotes').value.trim()};
+ const c={...old,id:old?.id||uid(),name,city:$('#cCity').value.trim(),freq:$('#cFreq').value,value:Number($('#cValue').value||0),lastDone:$('#cLast').value,nextDue:$('#cNext').value||nextDate($('#cLast').value,$('#cFreq').value),seedStage:$('#cStage').value,seedPayment:$('#cLastPayment').value,notes:$('#cNotes').value.trim()};
+ if(c.lastDone>today())return alert('O último serviço realizado não pode ter uma data futura. Use a próxima visita prevista para agendar.');
  if(old)DB.clients=DB.clients.map(x=>x.id===c.id?c:x);else DB.clients.push(c);
- syncInitialService(c);saveDB();clientDialog.close();
+ if(isNew)syncInitialService(c);saveDB();clientDialog.close();
 }
 function deleteClient(){
  if(!editingClientId||!confirm('Excluir este cliente e todo o histórico dele?'))return;
@@ -438,6 +454,7 @@ function openDone(id){
 }
 function confirmDone(){
  const c=client(doneClientId),date=$('#doneDate').value;if(!c||!date)return;
+ if(date>today())return alert('Não é possível registrar como realizado um serviço em data futura.');
  const amount=Number($('#doneValue').value||c.value||0),note=$('#doneNotes').value.trim();
  if(c.freq==='Quinzenal'){
    let open=servicesFor(c.id).filter(s=>!s.cycleClosed);
@@ -454,14 +471,23 @@ function confirmDone(){
 }
 function markPaid(clientId,serviceId=null){
  const c=client(clientId);if(!c)return;
- let targets=DB.services.filter(s=>s.clientId===clientId&&s.chargeDue&&!s.paid);
+ let targets=DB.services.filter(s=>s.clientId===clientId&&isCharge(s)&&!s.paid);
  if(serviceId)targets=targets.filter(s=>s.id===serviceId);
  if(!targets.length)return;
- const target=targets[0];target.paid=true;target.cycleClosed=true;
- if(c.freq==='Quinzenal'){
-   const all=servicesFor(c.id),ix=all.findIndex(s=>s.id===target.id); if(ix>0)all[ix-1].cycleClosed=true;
- }
- DB.payments.push({id:uid(),clientId,date:today(),amount:Number(target.amount||c.value||0),serviceId:target.id});
+ const target=targets[0],amount=Number(target.amount??c.value??0);
+ if(activePayments().some(p=>p.serviceId===target.id))return alert('Este serviço já possui um pagamento registrado.');
+ if(!confirm(`Confirmar recebimento de ${money(amount)} de ${c.name}?\n${serviceLabel(target)}\nData do pagamento: ${fmt(today())}`))return;
+ target.paid=true;target.cycleClosed=true;
+ DB.payments.push({id:uid(),clientId,clientName:c.name,date:today(),amount,serviceId:target.id,serviceDate:target.date,serviceDescription:serviceLabel(target)});
+ saveDB();
+}
+function undoPayment(paymentId){
+ const p=DB.payments.find(x=>x.id===paymentId&&!x.reversedAt);if(!p)return;
+ const s=DB.services.find(x=>x.id===p.serviceId&&x.clientId===p.clientId);
+ if(!s||!s.chargeDue)return alert('Não foi possível localizar a cobrança deste pagamento. Nenhum dado foi alterado.');
+ if(!confirm(`Desfazer o pagamento de ${money(p.amount)} de ${p.clientName||client(p.clientId)?.name||'Cliente'}?\n${p.serviceDescription||serviceLabel(s)}\nO serviço será mantido no histórico.`))return;
+ p.reversedAt=new Date().toISOString();
+ s.paid=activePayments().some(x=>x.serviceId===s.id);
  saveDB();
 }
 
