@@ -103,6 +103,7 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
  .item{flex-wrap:wrap}.visitItem{display:block}.visitItem>.amount{margin-top:8px}.search{min-width:0;width:100%}
  #clients table,#clients tbody,#clients tr,#clients td{display:block;min-width:0}#clients thead{display:none}#clients tr{padding:12px;border-bottom:1px solid var(--line)}#clients td{padding:4px 0;border:0}#clients td[data-label]::before{content:attr(data-label) ': ';font-weight:bold}
 }
+.customerCard,.offeringCard{background:white;border:1px solid var(--line);border-radius:14px;padding:16px}.customerCard .rowActions,.offeringCard .rowActions{margin-top:12px}.serviceName{font-weight:bold;color:var(--green);margin:5px 0}.dayCount{display:block}.day .dayCount{font-size:10px}.field label{line-height:1.4}dialog{max-height:90vh;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -118,9 +119,11 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
 </header>
 
 <div class="shell">
+<div id="syncStatus" class="notice" role="status">Carregando dados compartilhados…</div>
 <nav class="nav">
  <button class="active" data-page="dashboard">Painel</button>
  <button data-page="clients">Clientes</button>
+ <button data-page="offerings">Serviços</button>
  <button data-page="agenda">Agenda</button>
  <button data-page="finance">Financeiro</button>
  <button data-page="history">Visitas</button>
@@ -143,15 +146,13 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
 </section>
 
 <section id="clients" class="page">
- <div class="hero"><div><h2>Clientes</h2><p>Nome, endereço, frequência e valor do serviço.</p></div><button class="primary" onclick="openClient()">+ Novo cliente</button></div>
- <div class="card">
-  <div class="cardBody">
-   <div class="toolbar"><input class="search" id="clientSearch" placeholder="Buscar cliente ou endereço..."><select id="clientFreq"><option value="">Todas frequências</option><option>Quinzenal</option><option>Mensal</option><option>A cada 10 dias</option><option>Avulso</option></select></div>
-  </div>
-  <div class="tableWrap"><table class="clientTable"><thead><tr><th>Nome</th><th>Endereço</th><th>Frequência</th><th>Valor do serviço</th><th>Ações</th></tr></thead><tbody id="clientRows"></tbody></table></div>
- </div>
+ <div class="hero"><div><h2>Clientes</h2><p>Um cadastro por cliente. Adicione os serviços dentro dele.</p></div><button class="primary" onclick="openClient()">+ Novo cliente</button></div>
+ <div class="toolbar"><input id="clientSearch" class="search" placeholder="Buscar cliente ou endereço..."></div><div id="clientList" class="list"></div>
 </section>
-
+<section id="offerings" class="page">
+ <div class="hero"><div><h2>Serviços dos clientes</h2><p>Cada serviço tem seu valor, frequência e agenda.</p></div><button class="primary" onclick="openOffering()">+ Novo serviço</button></div>
+ <div class="toolbar"><select id="offeringFilter" aria-label="Filtrar serviços por cliente"></select><input id="offeringSearch" class="search" placeholder="Buscar serviço..."></div><div id="offeringList" class="list"></div>
+</section>
 <section id="agenda" class="page">
  <div class="hero"><div><h2>Agenda de serviços</h2><p>Datas previstas não geram cobrança. Se a data passar sem realizar, fica apenas como atrasada.</p></div><div class="tabsSmall"><button onclick="changeMonth(-1)">◀</button><button id="monthTitle"></button><button onclick="changeMonth(1)">▶</button></div></div>
  <div class="card"><div class="cardBody"><div id="calendar" class="calendar"></div><div id="dayDetails" class="dayDetails" aria-live="polite"></div></div></div>
@@ -174,14 +175,7 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
  <div class="card"><div class="cardBody"><div class="toolbar"><input id="historySearch" class="search" placeholder="Buscar cliente..."></div><div id="historyList" class="list"></div></div></div>
 </section>
 
-<section id="settings" class="page">
- <div class="hero"><div><h2>Dados & Backup</h2><p>Esta versão usa sempre o mesmo banco local. Faça backup também para não depender apenas do navegador do celular.</p></div></div>
- <div class="notice"><strong>Importante:</strong> abrir o arquivo HTML por aplicativos diferentes no celular pode fazer o navegador tratar cada abertura como um local diferente. Por isso, mantenha este arquivo principal e faça um backup periódico.</div>
- <div class="twoCol">
-  <div class="card"><div class="cardHead"><h3>Backup dos dados</h3></div><div class="cardBody"><p class="minor" style="font-size:13px;line-height:1.55">O backup salva clientes, serviços, pagamentos e configurações em um arquivo JSON.</p><div class="toolbar"><button class="primary" onclick="exportData()">Salvar backup</button><button class="ghost" onclick="document.getElementById('importFile').click()">Restaurar backup</button></div></div></div>
-  <div class="card"><div class="cardHead"><h3>Banco local</h3></div><div class="cardBody"><div class="minor" style="font-size:13px;line-height:1.55">Chave fixa: <strong>JK_GESTAO_MASTER</strong><br>As próximas atualizações devem continuar usando esta mesma chave.</div><div class="sectionTitle">Migração</div><button class="secondary" onclick="migrateOld(true)">Buscar dados das versões antigas</button></div></div>
- </div>
-</section>
+<section id="settings" class="page"><div class="hero"><div><h2>Dados & Backup</h2><p>Clientes, serviços, visitas, pagamentos e registros da migração.</p></div></div><div class="card"><div class="cardBody"><div class="toolbar"><button class="primary" onclick="exportData()">Salvar backup</button><button class="ghost" onclick="document.getElementById('importFile').click()">Restaurar backup</button></div><p class="minor">O backup inclui os registros originais preservados durante a união de duplicidades.</p></div></div></section>
 </div>
 </div>
 
@@ -193,18 +187,17 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
   <div class="formGrid">
    <div class="field full"><label>Cliente / empresa *</label><input id="cName" placeholder="Ex.: Rede Feminina, Rosi, Empresa X"></div>
    <div class="field"><label>Endereço</label><input id="cCity" placeholder="Rua, número, bairro e cidade"></div>
-   <div class="field"><label>Frequência</label><select id="cFreq"><option>Quinzenal</option><option>Mensal</option><option>A cada 10 dias</option><option>Avulso</option></select></div>
-   <div class="field"><label>Valor do serviço (R$)</label><input id="cValue" type="number" min="0" step="0.01"></div>
-   <div class="field full"><div class="note">A cada 10 dias: +10 dias. Quinzenal: +15 dias. Mensal: +1 mês. Se cair sábado ou domingo, a próxima visita vai automaticamente para segunda-feira. A próxima data é apenas agenda e nunca cria cobrança sozinha.</div></div>
+
   </div>
  </div>
- <div class="dlgFoot"><button id="deleteClientBtn" class="danger" style="display:none" onclick="deleteClient()">Excluir</button><button class="ghost" onclick="clientDialog.close()">Cancelar</button><button class="primary" onclick="saveClient()">Salvar cliente</button></div>
+ <div class="dlgFoot"><button class="ghost" onclick="clientDialog.close()">Cancelar</button><button class="primary" onclick="saveClient()">Salvar cliente</button></div>
 </dialog>
 
 <dialog id="doneDialog">
  <div class="dlgHead"><h3>Registrar serviço realizado</h3><button class="iconbtn" onclick="doneDialog.close()">Fechar</button></div>
  <div class="dlgBody">
   <div class="field" style="margin-bottom:14px"><label for="doneClientSelect">Cliente</label><select id="doneClientSelect" onchange="selectDoneClient(this.value)"></select></div>
+  <div class="field" style="margin-bottom:14px"><label for="doneOfferingSelect">Serviço</label><select id="doneOfferingSelect" onchange="selectDoneOffering(this.value)"></select></div>
   <div class="formGrid">
    <div class="field"><label>Data em que o serviço foi feito</label><input id="doneDate" type="date"></div>
    <div class="field"><label>Valor do serviço / ciclo (R$)</label><input id="doneValue" type="number" step="0.01" min="0"></div>
@@ -215,325 +208,20 @@ dialog::backdrop{background:rgba(14,31,20,.55)}
  <div class="dlgFoot"><button class="ghost" onclick="doneDialog.close()">Cancelar</button><button class="primary" onclick="confirmDone()">Registrar realizado</button></div>
 </dialog>
 
-<script>
-const MASTER_KEY='JK_GESTAO_MASTER';
-const SUPABASE_URL='https://paelenmndnwgnlbvqxrs.supabase.co';
-const SUPABASE_KEY='sb_publishable_rG8rH2EZytvDBF4tqIJ6kQ_yYJU7MXN';
-const SHARED_ENDPOINT=SUPABASE_URL+'/rest/v1/jk_shared_state?id=eq.main';
-const OLD_KEYS=['jk_gestao_clientes_v7','jk_gestao_clientes_v6','jk_gestao_clientes_v5','jk_gestao_clientes_v4','jk_gestao_clientes_v3','jk_gestao_clientes_v2','jk_gestao_clientes'];
-const $=s=>document.querySelector(s);
-let DB=loadDB();
-let cloudReady=false, cloudSaving=false, cloudSaveAgain=false;
-let editingClientId=null, doneClientId=null;
-let selectedDay=null;
-let calCursor=new Date(); calCursor.setDate(1);
+<dialog id="offeringDialog">
+ <div class="dlgHead"><h3 id="offeringTitle">Serviço</h3><button class="iconbtn" onclick="offeringDialog.close()">Fechar</button></div>
+ <div class="dlgBody"><div class="formGrid">
+ <div class="field full"><label for="oClient">Cliente</label><select id="oClient"></select></div>
+ <div class="field full"><label for="oName">Nome / descrição do serviço</label><input id="oName" placeholder="Ex.: Espalhar brita"></div>
+ <div class="field"><label for="oFreq">Frequência</label><select id="oFreq"><option>A cada 10 dias</option><option>Quinzenal</option><option>Mensal</option><option>Avulso</option></select></div>
+ <div class="field"><label for="oValue">Valor (R$)</label><input id="oValue" type="number" min="0" step="0.01"></div>
+ <div class="field"><label for="oNext">Próxima visita prevista</label><input id="oNext" type="date"></div>
+ <div class="field full"><div class="note">A previsão não gera cobrança. Ao registrar uma visita realizada, a próxima é calculada pela frequência deste serviço, passando fins de semana para segunda-feira. Quinzenais cobram na 2ª visita do próprio serviço.</div></div>
+ </div></div><div class="dlgFoot"><button class="ghost" onclick="offeringDialog.close()">Cancelar</button><button class="primary" onclick="saveOffering()">Salvar serviço</button></div>
+</dialog>
+<dialog id="paymentDialog"><div class="dlgHead"><h3>Registrar pagamento</h3><button class="iconbtn" onclick="paymentDialog.close()">Fechar</button></div><div class="dlgBody"><div id="paymentSummary" class="note"></div><div class="field" style="margin-top:12px"><label for="paymentDate">Data do pagamento</label><input id="paymentDate" type="date"></div></div><div class="dlgFoot"><button class="ghost" onclick="paymentDialog.close()">Cancelar</button><button class="primary" onclick="confirmPayment()">Confirmar recebimento</button></div></dialog>
 
-function baseDB(){return {clients:[],services:[],payments:[],meta:{createdAt:new Date().toISOString(),version:1}}}
-function loadDB(){
- try{const x=JSON.parse(localStorage.getItem(MASTER_KEY)||'null'); if(x&&Array.isArray(x.clients)) return normalizeDB(x);}catch(e){}
- return baseDB();
-}
-function normalizeDB(x){
- const db={...x,clients:Array.isArray(x.clients)?x.clients.map(c=>({...c})):[],services:Array.isArray(x.services)?x.services.map(s=>({...s})):[],payments:Array.isArray(x.payments)?x.payments.map(p=>({...p})):[],meta:{...(x.meta||{version:1})}};
- for(const c of db.clients){
-  if(c.lastDone&&c.lastDone<=today()&&!db.services.some(s=>s.clientId===c.id&&s.date===c.lastDone)){
-   const second=c.freq==='Quinzenal'&&c.seedStage==='2',charge=c.freq!=='Quinzenal'||second;
-   db.services.push({id:'legacy_visit_'+c.id+'_'+c.lastDone,clientId:c.id,date:c.lastDone,amount:Number(c.value||0),chargeDue:charge,paid:charge?c.seedPayment==='paid':true,cycleClosed:c.freq!=='Quinzenal'||second,...(c.freq==='Quinzenal'?{cyclePosition:second?2:1}:{}),note:'Histórico inicial • migrado do cadastro'});
-  }
- }
- db.meta.visitsOrganization=2;
- return db;
-}
-
-function saveDB(){
- localStorage.setItem(MASTER_KEY,JSON.stringify(DB));
- renderAll();
- if(cloudReady)saveCloud();
-}
-async function saveCloud(){
- if(cloudSaving){cloudSaveAgain=true;return}
- cloudSaving=true;
- try{
-   const r=await fetch(SHARED_ENDPOINT,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({data:DB,updated_at:new Date().toISOString()})});
-   if(!r.ok)throw new Error('Falha ao salvar: '+r.status);
- }catch(e){console.error(e);}
- finally{cloudSaving=false;if(cloudSaveAgain){cloudSaveAgain=false;saveCloud()}}
-}
-async function loadCloud(){
- const r=await fetch(SHARED_ENDPOINT+'&select=data,updated_at',{headers:{'apikey':SUPABASE_KEY},cache:'no-store'});
- if(!r.ok)throw new Error('Falha ao carregar: '+r.status);
- const rows=await r.json();
- return rows?.[0]||{data:null,updated_at:null};
-}
-async function bootShared(){
- try{
-   const row=await loadCloud();
-   if(row&&row.data&&Array.isArray(row.data.clients)){
-     DB=normalizeDB(row.data);
-     localStorage.setItem(MASTER_KEY,JSON.stringify(DB));
-   }else{
-     if(!DB.clients.length)migrateOld(false);
-   }
-   cloudReady=true;
-   if(!(row&&row.data))await saveCloud();
- }catch(e){
-   console.error(e);
-   if(!DB.clients.length)migrateOld(false);
-   alert('Não foi possível conectar ao banco compartilhado agora. O sistema abriu com os dados salvos neste aparelho.');
- }
- renderAll();
-}
-async function refreshCloud(){
- if(!cloudReady||cloudSaving)return;
- try{
-   const row=await loadCloud();
-   if(row&&row.data&&Array.isArray(row.data.clients)){
-     const normalized=normalizeDB(row.data),incoming=JSON.stringify(normalized), current=JSON.stringify(DB);
-     if(incoming!==current){DB=normalized;localStorage.setItem(MASTER_KEY,JSON.stringify(DB));renderAll()}
-   }
- }catch(e){console.error(e)}
-}
-function uid(){return (crypto&&crypto.randomUUID)?crypto.randomUUID():'id_'+Date.now()+'_'+Math.random().toString(36).slice(2)}
-function today(){
- const d=new Date(),z=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
-}
-function parseDate(s){return s?new Date(s+'T12:00:00'):null}
-function iso(d){return d.toISOString().slice(0,10)}
-function fmt(s){if(!s)return '—'; const [y,m,d]=s.split('-'); return `${d}/${m}/${y}`}
-function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function nextDate(last,freq){
- if(!last||freq==='Avulso')return '';
- let d=parseDate(last);
- if(freq==='A cada 10 dias')d.setDate(d.getDate()+10);
- if(freq==='Quinzenal')d.setDate(d.getDate()+15);
- if(freq==='Mensal')d.setMonth(d.getMonth()+1);
- if(d.getDay()===6)d.setDate(d.getDate()+2);
- else if(d.getDay()===0)d.setDate(d.getDate()+1);
- return iso(d);
-}
-function client(id){return DB.clients.find(c=>c.id===id)}
-function isCharge(s){return s.chargeDue===true && !!s.date && s.date<=today()}
-function activePayments(){return DB.payments.filter(p=>!p.reversedAt)}
-function serviceLabel(s){return s?`${s.cyclePosition===2?'Ciclo quinzenal • 2ª visita':'Serviço realizado'} em ${fmt(s.date)}`:'Serviço não localizado'}
-function servicesFor(id){return DB.services.filter(s=>s.clientId===id).sort((a,b)=>a.date.localeCompare(b.date))}
-function pendingCharges(id){return DB.services.filter(s=>s.clientId===id && isCharge(s) && !s.paid)}
-function paidThisMonth(){
- const prefix=today().slice(0,7);
- return activePayments().filter(p=>(p.date||'').startsWith(prefix)).reduce((a,p)=>a+Number(p.amount||0),0)
-}
-function totalPending(){return DB.services.filter(s=>isCharge(s)&&!s.paid).reduce((a,s)=>a+Number(s.amount||0),0)}
-
-function agendaState(c){
- if(!c.nextDue)return {cls:'neutral',text:'Sem próxima data'};
- if(c.nextDue<today())return {cls:'danger',text:'Atrasado • não realizado'};
- if(c.nextDue===today())return {cls:'warn',text:'Previsto para hoje'};
- return {cls:'neutral',text:'Agendado'};
-}
-function payState(c){
- const p=pendingCharges(c.id);
- if(p.length)return {cls:'warn',text:'Pagamento pendente'};
- if(c.freq==='Quinzenal'){
-   const cycle=servicesFor(c.id).filter(s=>!s.cycleClosed);
-   if(cycle.length===1)return {cls:'neutral',text:'1ª visita feita • ainda não cobrar'};
- }
- return {cls:'ok',text:'Em dia'};
-}
-function pill(x){return `<span class="pill ${x.cls}"><span class="dot"></span>${x.text}</span>`}
-
-function goPage(id){
- document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
- document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
- if(id==='agenda')renderAgenda();
-}
-document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>goPage(b.dataset.page));
-
-function renderAll(){
- renderMetrics(); renderClients(); renderDashboard(); renderFinance(); renderReceived(); renderHistory(); renderAgenda();
-}
-function renderMetrics(){
- $('#mClients').textContent=DB.clients.length;
- $('#mLate').textContent=DB.clients.filter(c=>c.nextDue&&c.nextDue<today()).length;
- $('#mReceive').textContent=money(totalPending());
- $('#mPaid').textContent=money(paidThisMonth());
- const t=parseDate(today()), end=new Date(t); end.setDate(end.getDate()+7);
- $('#mWeek').textContent=DB.clients.filter(c=>{const d=parseDate(c.nextDue);return d&&d>=t&&d<=end}).length;
-}
-function renderClients(){
- const q=($('#clientSearch')?.value||'').trim().toLowerCase(),f=$('#clientFreq')?.value||'';
- const list=DB.clients.filter(c=>(!q||[c.name,c.address??c.city].join(' ').toLowerCase().includes(q))&&(!f||c.freq===f)).sort((a,b)=>a.name.localeCompare(b.name));
- $('#clientRows').innerHTML=list.length?list.map(c=>`<tr><td><div class="name">${esc(c.name)}</div></td><td data-label="Endereço">${esc(c.address??c.city??'')}</td><td data-label="Frequência">${esc(c.freq)}</td><td data-label="Valor">${money(c.value)}</td><td><button class="ghost" onclick="openClient('${c.id}')">Editar</button></td></tr>`).join(''):'<tr><td colspan="5"><div class="empty">Nenhum cliente encontrado.</div></td></tr>';
-}
-function renderDashboard(){
- const upcoming=DB.clients.filter(c=>c.nextDue).sort((a,b)=>a.nextDue.localeCompare(b.nextDue)).slice(0,6);
- $('#dashAgenda').innerHTML=upcoming.length?upcoming.map(c=>`<div class="item"><div class="left"><div class="title">${esc(c.name)}</div><div class="meta">${fmt(c.nextDue)} • ${esc(c.freq)} • ${agendaState(c).text}</div></div><button class="secondary" onclick="openDone('${c.id}')">Realizado</button></div>`).join(''):'<div class="empty">Sem visitas cadastradas.</div>';
- const pend=DB.services.filter(s=>isCharge(s)&&!s.paid).sort((a,b)=>a.date.localeCompare(b.date));
- $('#dashPending').innerHTML=pend.length?pend.slice(0,6).map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Serviço ${fmt(s.date)}</div></div><div class="amount pendingAmount">${money(s.amount)}</div></div>`}).join(''):'<div class="empty">Nenhum pagamento pendente.</div>';
-}
-function renderFinance(){
- const pend=DB.services.filter(s=>isCharge(s)&&!s.paid);
- $('#fPending').textContent=money(totalPending()); $('#fPaid').textContent=money(paidThisMonth()); $('#fCount').textContent=pend.length;
- $('#financeList').innerHTML=pend.length?pend.map(s=>{const c=client(s.clientId);return `<div class="item"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Cobrança gerada pelo serviço realizado em ${fmt(s.date)}${s.note?' • '+esc(s.note):''}</div></div><div><div class="amount pendingAmount">${money(s.amount)}</div><button class="primary" style="margin-top:7px" onclick="markPaid('${s.clientId}','${s.id}')">Marcar recebido</button></div></div>`}).join(''):'<div class="empty">Tudo em dia. Nenhuma cobrança pendente.</div>';
-}
-function renderReceived(){
- const payments=[...activePayments()].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
- $('#receivedList').innerHTML=payments.length?payments.map(p=>{
-   const s=DB.services.find(s=>s.id===p.serviceId&&s.clientId===p.clientId);
-   return `<div class="item"><div class="left"><div class="title">${esc(p.clientName||client(p.clientId)?.name||'Cliente')}</div><div class="meta">Pagamento em ${fmt(p.date)}<br>${esc(p.serviceDescription||serviceLabel(s))}</div></div><div><div class="amount">${money(p.amount)}</div><button class="danger" style="margin-top:7px" onclick="undoPayment('${p.id}')">Desfazer pagamento</button></div></div>`;
- }).join(''):'<div class="empty">Nenhum pagamento recebido registrado.</div>';
-}
-function cycleCharge(s){
- if(s.chargeDue)return s;
- if(s.cyclePosition!==1)return null;
- const rows=servicesFor(s.clientId),i=rows.findIndex(x=>x.id===s.id);
- return rows.find(x=>x.cycleFirstId===s.id)||(rows[i+1]?.cyclePosition===2?rows[i+1]:null);
-}
-function renderHistory(){
- const q=($('#historySearch')?.value||'').toLowerCase();
- const arr=[...DB.services].sort((a,b)=>b.date.localeCompare(a.date)).filter(s=>!q||(client(s.clientId)?.name||'').toLowerCase().includes(q));
- $('#historyList').innerHTML=arr.length?arr.map(s=>{
- const c=client(s.clientId),charge=cycleCharge(s),payments=charge?activePayments().filter(p=>p.serviceId===charge.id):[];
- const paid=!!charge?.paid,status=charge?(paid?'Pago':'Não pago • A receber'):'Não pago • aguardando 2ª visita';
- const actions=charge?(paid?(payments.length?payments.map(p=>`<button class="danger" onclick="undoPayment('${p.id}')">Desfazer pagamento</button>`).join(''):`<button class="danger" onclick="undoLegacyPayment('${charge.id}')">Desfazer pagamento</button>`):`<button class="primary" onclick="markPaid('${s.clientId}','${charge.id}')">Registrar pagamento</button>`):'';
- const reversals=DB.payments.filter(p=>p.serviceId===s.id&&p.reversedAt);
- return `<div class="item visitItem"><div class="left"><div class="title">${esc(c?.name||'Cliente')}</div><div class="meta">Visita: ${fmt(s.date)} • Realizado${s.cyclePosition?' • '+s.cyclePosition+'ª visita do ciclo':''}<br>${status}${paid?'<br>Data do pagamento: '+(payments.length?payments.map(p=>fmt(p.date)).join(', '):'não informada no histórico'):''}${s.note?'<br>'+esc(s.note):''}${c?.notes?'<br>'+esc(c.notes):''}${reversals.length?'<br>'+reversals.length+' pagamento(s) desfeito(s)':''}</div><div class="rowActions">${actions}</div></div><div class="amount">${money(s.amount)}</div></div>`;
- }).join(''):'<div class="empty">Nenhum serviço realizado registrado.</div>';
-}
-function undoLegacyPayment(id){
- const s=DB.services.find(x=>x.id===id);if(!s||!s.chargeDue||!s.paid)return;
- if(activePayments().some(p=>p.serviceId===id))return;
- if(!confirm(`Desfazer o pagamento histórico de ${money(s.amount)} de ${client(s.clientId)?.name}? A data original não foi informada. O serviço será mantido.`))return;
- DB.payments.push({id:uid(),clientId:s.clientId,serviceId:s.id,amount:s.amount,date:null,legacy:true,reversedAt:new Date().toISOString()});s.paid=false;saveDB();
-}
-
-function renderAgenda(){
- const y=calCursor.getFullYear(),m=calCursor.getMonth();
- $('#monthTitle').textContent=new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric'}).format(calCursor);
- const first=new Date(y,m,1), start=new Date(y,m,1-first.getDay()), end=new Date(y,m+1,0), total=Math.ceil((first.getDay()+end.getDate())/7)*7;
- let out=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(x=>`<div class="calHead">${x}</div>`).join('');
- for(let i=0;i<total;i++){let d=new Date(start);d.setDate(start.getDate()+i);let ds=iso(d), cls=d.getMonth()!==m?' muted':'';if(ds===today())cls+=' today';
-   const ev=DB.clients.filter(c=>c.nextDue===ds);out+=`<button type="button" class="day${cls}${selectedDay===ds?' selected':''}" aria-label="${fmt(ds)}: ${ev.length} previstas, ${DB.services.filter(s=>s.date===ds).length} realizadas" onclick="selectDay('${ds}')"><div class="dayNum">${d.getDate()}</div><span class="dayCount">${ev.length?ev.length+' prev.':''}${DB.services.some(s=>s.date===ds)?'<br>✓ feitas':''}</span>${ev.map(c=>`<div class="event ${ds<today()?'late':''}" title="${esc(c.name)}">${esc(c.name)}</div>`).join('')}</button>`;
- }
- $('#calendar').innerHTML=out;renderDayDetails();
- const late=DB.clients.filter(c=>c.nextDue&&c.nextDue<today()).sort((a,b)=>a.nextDue.localeCompare(b.nextDue));
- $('#lateList').innerHTML=late.length?late.map(c=>`<div class="item"><div class="left"><div class="title">${esc(c.name)}</div><div class="meta">Previsto para ${fmt(c.nextDue)} • ainda não realizado • não gera cobrança</div></div><button class="secondary" onclick="openDone('${c.id}')">Registrar quando fizer</button></div>`).join(''):'<div class="empty">Nenhum serviço atrasado.</div>';
-}
-function selectDay(ds){selectedDay=ds;renderAgenda()}
-function renderDayDetails(){
- if(!selectedDay){$('#dayDetails').innerHTML='<p class="minor">Toque em um dia para ver as visitas previstas e realizadas.</p>';return}
- const planned=DB.clients.filter(c=>c.nextDue===selectedDay),done=DB.services.filter(s=>s.date===selectedDay);
- $('#dayDetails').innerHTML=`<div class="sectionTitle">${fmt(selectedDay)}</div><div class="list">`+planned.map(c=>`<div class="item"><div class="left"><div class="title">${esc(c.name)}</div><div class="meta">${esc(c.address??c.city)} • ${agendaState(c).text}${c.notes?' • '+esc(c.notes):''}</div></div><button class="secondary" onclick="openDone('${c.id}')">Registrar realizado</button></div>`).join('')+done.map(s=>`<div class="item"><div class="left"><div class="title">${esc(client(s.clientId)?.name||'Cliente')}</div><div class="meta">Realizado • ${money(s.amount)}${s.cyclePosition?' • '+s.cyclePosition+'ª visita do ciclo':''}</div></div><button class="ghost" onclick="$('#historySearch').value=client('${s.clientId}')?.name||'';renderHistory();goPage('history')">Ver visita</button></div>`).join('')+(!planned.length&&!done.length?'<div class="empty">Nenhuma visita neste dia.</div>':'')+'</div>';
-}
-function changeMonth(n){calCursor.setMonth(calCursor.getMonth()+n);renderAgenda()}
-
-function openClient(id=null){
- editingClientId=id;const c=id?client(id):null;
- $('#clientDlgTitle').textContent=c?'Editar cliente':'Novo cliente';
- $('#cName').value=c?.name||'';$('#cCity').value=c?.address??c?.city??'';$('#cFreq').value=c?.freq||'Quinzenal';$('#cValue').value=c?.value??'';
- $('#deleteClientBtn').style.display=c?'inline-block':'none';clientDialog.showModal();
-}
-$('#cFreq').onchange=()=>{};
-
-function saveClient(){
- const name=$('#cName').value.trim(),value=Number($('#cValue').value);
- if(!name)return alert('Informe o nome do cliente.');
- if(!Number.isFinite(value)||value<0)return alert('Informe um valor válido.');
- const old=editingClientId?client(editingClientId):null;
- const c={...old,id:old?.id||uid(),name,address:$('#cCity').value.trim(),freq:$('#cFreq').value,value};
- const last=servicesFor(c.id).filter(s=>s.date<=today()).at(-1)?.date||old?.lastDone||'';
- c.lastDone=last;c.nextDue=c.freq==='Avulso'?(old?.nextDue||''):nextDate(last,c.freq);
- if(old)DB.clients=DB.clients.map(x=>x.id===c.id?c:x);else DB.clients.push(c);
- saveDB();clientDialog.close();
-}
-function deleteClient(){
- if(!editingClientId||!confirm('Excluir este cliente e todo o histórico dele?'))return;
- DB.clients=DB.clients.filter(c=>c.id!==editingClientId);DB.services=DB.services.filter(s=>s.clientId!==editingClientId);DB.payments=DB.payments.filter(p=>p.clientId!==editingClientId);saveDB();clientDialog.close();
-}
-
-function openDone(id=null){
- if(!DB.clients.length)return alert('Cadastre um cliente primeiro.');
- $('#doneClientSelect').innerHTML='<option value="">Selecione o cliente</option>'+[...DB.clients].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}${c.notes?' — '+esc(c.notes):''}</option>`).join('');
- $('#doneClientSelect').value=id||'';$('#doneDate').value=today();$('#doneDate').max=today();$('#doneNotes').value='';selectDoneClient(id);doneDialog.showModal();
-}
-function selectDoneClient(id){
- doneClientId=id;const c=client(id);$('#doneValue').value=c?.value??'';
- if(!c){$('#doneHint').textContent='Selecione o cliente para registrar uma visita realizada.';return}
- if(c.freq==='Quinzenal'){const open=servicesFor(id).filter(s=>!s.cycleClosed&&s.cyclePosition===1);$('#doneHint').textContent=open.length===0?'Esta será a 1ª visita do ciclo: ainda não gera cobrança.':'Esta será a 2ª visita do ciclo: ao registrar, a cobrança ficará pendente.'}
- else $('#doneHint').textContent='Ao registrar este serviço como realizado, ele ficará pendente de pagamento.';
-}
-function confirmDone(){
- const c=client(doneClientId),date=$('#doneDate').value;if(!c||!date)return alert('Selecione o cliente e informe a data da visita.');
- if(date>today())return alert('Não é possível registrar como realizado um serviço em data futura.');
- const amount=Number($('#doneValue').value),note=$('#doneNotes').value.trim();
- if(!Number.isFinite(amount)||amount<0)return alert('Informe um valor válido.');
- const last=servicesFor(c.id).at(-1);
- if(c.freq==='Quinzenal'&&last&&date<last.date)return alert('Para manter a ordem do ciclo quinzenal, use uma data igual ou posterior à última visita registrada.');
- if(c.freq==='Quinzenal'){
-   let open=servicesFor(c.id).filter(s=>!s.cycleClosed&&s.cyclePosition===1);
-   if(open.length===0){
-     DB.services.push({id:uid(),clientId:c.id,date,amount,chargeDue:false,paid:true,cycleClosed:false,cyclePosition:1,note});
-   } else {
-     const first=open[0]; first.cycleClosed=true;
-     DB.services.push({id:uid(),clientId:c.id,date,amount,chargeDue:true,paid:false,cycleClosed:true,cyclePosition:2,cycleFirstId:first.id,note});
-   }
- } else {
-   DB.services.push({id:uid(),clientId:c.id,date,amount,chargeDue:true,paid:false,cycleClosed:false,note});
- }
- c.lastDone=servicesFor(c.id).filter(s=>s.date<=today()).at(-1)?.date||date;c.nextDue=nextDate(c.lastDone,c.freq);saveDB();doneDialog.close();
-}
-function markPaid(clientId,serviceId=null){
- const c=client(clientId);if(!c)return;
- let targets=DB.services.filter(s=>s.clientId===clientId&&isCharge(s)&&!s.paid);
- if(serviceId)targets=targets.filter(s=>s.id===serviceId);
- if(!targets.length)return;
- const target=targets[0],amount=Number(target.amount??c.value??0);
- if(activePayments().some(p=>p.serviceId===target.id))return alert('Este serviço já possui um pagamento registrado.');
- if(!confirm(`Confirmar recebimento de ${money(amount)} de ${c.name}?\n${serviceLabel(target)}\nData do pagamento: ${fmt(today())}`))return;
- target.paid=true;target.cycleClosed=true;
- DB.payments.push({id:uid(),clientId,clientName:c.name,date:today(),amount,serviceId:target.id,serviceDate:target.date,serviceDescription:serviceLabel(target)});
- saveDB();
-}
-function undoPayment(paymentId){
- const p=DB.payments.find(x=>x.id===paymentId&&!x.reversedAt);if(!p)return;
- const s=DB.services.find(x=>x.id===p.serviceId&&x.clientId===p.clientId);
- if(!s||!s.chargeDue)return alert('Não foi possível localizar a cobrança deste pagamento. Nenhum dado foi alterado.');
- if(!confirm(`Desfazer o pagamento de ${money(p.amount)} de ${p.clientName||client(p.clientId)?.name||'Cliente'}?\n${p.serviceDescription||serviceLabel(s)}\nO serviço será mantido no histórico.`))return;
- p.reversedAt=new Date().toISOString();
- s.paid=activePayments().some(x=>x.serviceId===s.id);
- saveDB();
-}
-
-function exportData(){
- const payload={...DB,meta:{...(DB.meta||{}),exportedAt:new Date().toISOString(),format:'JK_GESTAO_MASTER'}};
- const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
- const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='JK_Gestao_Backup_'+today()+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),500);
-}
-$('#importFile').onchange=async e=>{
- const f=e.target.files[0];if(!f)return;
- try{const x=JSON.parse(await f.text());if(!x||!Array.isArray(x.clients))throw 0;DB=normalizeDB(x);saveDB();alert('Backup restaurado com sucesso.')}catch{alert('Esse arquivo não parece ser um backup válido da JK.')}e.target.value='';
-};
-
-function migrateOld(showMsg=false){
- if(DB.clients.length){if(showMsg)alert('O banco principal já possui clientes. Para evitar duplicação, a migração automática não foi feita.');return false;}
- for(const key of OLD_KEYS){
-   try{
-    const old=JSON.parse(localStorage.getItem(key)||'null');
-    if(old&&Array.isArray(old.clients)&&old.clients.length){
-      DB.clients=old.clients.map(c=>({id:c.id||uid(),name:c.name||'Cliente',city:c.city||'',freq:c.freq||'Avulso',value:Number(c.value||0),lastDone:c.lastDone||c.last||'',nextDue:c.nextDue||c.next||'',notes:c.notes||''}));
-      const hist=old.visits||old.history||[];
-      DB.services=hist.map(v=>({id:v.id||uid(),clientId:v.clientId,date:v.date||v.completedDate||'',amount:Number(v.amount||0),chargeDue:v.paid===false,paid:v.paid===true,cycleClosed:v.paid===true,note:'Importado de versão antiga'})).filter(s=>s.date&&s.clientId);
-      DB=normalizeDB(DB);saveDB();if(showMsg)alert('Dados encontrados e importados da versão anterior.');return true;
-    }
-   }catch(e){}
- }
- if(showMsg)alert('Não encontrei dados acessíveis das versões antigas neste navegador.');
- return false;
-}
-
-$('#clientSearch').oninput=renderClients;$('#clientFreq').onchange=renderClients;$('#historySearch').oninput=renderHistory;
-bootShared();
-window.addEventListener('focus',refreshCloud);
-setInterval(refreshCloud,15000);
-</script>
+<script src="data-model.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
